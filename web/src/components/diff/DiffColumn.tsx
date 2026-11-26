@@ -8,6 +8,7 @@ import {
 } from "react";
 import { fileLink, pressLink, type LinkSpan } from "../../lib/diffLink";
 import { type DraftTarget, useReview } from "../../lib/reviewContext";
+import type { ReviewSettings } from "../../lib/reviewSettings";
 import type { SelectionMiss } from "../../lib/selection";
 import {
   cellLine,
@@ -17,6 +18,7 @@ import {
   selectionTarget,
 } from "../../lib/selection";
 import { plainClick, shortcutKey } from "../../lib/shortcutKey";
+import { SplitFit } from "../../lib/splitFit";
 
 const MISS_TEXT: Record<SelectionMiss["miss"], string> = {
   "mixed-sides":
@@ -179,6 +181,53 @@ function DraftShortcut({ column }: { column: Column }) {
   ) : null;
 }
 
+const PROBE_LINE_NUMBER = "9999";
+
+/** A hidden row of the split layout that measures `SplitFit`. Its code
+ * column contains more zeros than fit on one line, so the first line of
+ * the zeros is as wide as the characters that fit. The gutter changes
+ * its width when the font of the code changes. */
+function FitProbe({ onFit }: { onFit: (fit: number) => void }) {
+  const row = useRef<HTMLDivElement>(null);
+  const gutter = useRef<HTMLSpanElement>(null);
+  const number = useRef<HTMLSpanElement>(null);
+  const zeros = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    if (!row.current || !gutter.current) return;
+    const observer = new ResizeObserver(() => {
+      const char =
+        (number.current?.getBoundingClientRect().width ?? 0) /
+        PROBE_LINE_NUMBER.length;
+      const line = zeros.current?.getClientRects()[0]?.width ?? 0;
+      if (char > 0) onFit(Math.round(line / char));
+    });
+    observer.observe(row.current);
+    observer.observe(gutter.current);
+    return () => {
+      observer.disconnect();
+    };
+  }, [onFit]);
+  return (
+    <div className="diff-grid diff-grid-split fit-probe" aria-hidden="true">
+      <div className="line-row" ref={row}>
+        <span className="g" ref={gutter}>
+          <span className="line-link">
+            <span ref={number}>{PROBE_LINE_NUMBER}</span>
+          </span>
+        </span>
+        <span className="code half">
+          <span className="sign" />
+          <span ref={zeros}>{"0".repeat(1000)}</span>
+        </span>
+        <span className="g">
+          <span className="line-link">{PROBE_LINE_NUMBER}</span>
+        </span>
+        <span className="code half" />
+      </div>
+    </div>
+  );
+}
+
 /** The column that contains the file sections of one diff, with the
  * gestures that work on every line of it.
  *
@@ -187,19 +236,20 @@ function DraftShortcut({ column }: { column: Column }) {
  * linked lines. A selection that no comment can span shows the reason
  * under it.
  *
- * `layout` is the layout of the file sections. `ready` is the diff base
- * of the rendered diff, absent while the diff loads. */
+ * `layout` is the layout setting of the file sections. `ready` is the
+ * diff base of the rendered diff, absent while the diff loads. */
 export default function DiffColumn({
   layout,
   ready,
   children,
 }: {
-  layout: "unified" | "split";
+  layout: ReviewSettings["layout"];
   ready: string | undefined;
   children: ReactNode;
 }) {
   const { changeNumber, selected, against, whitespace } = useReview();
   const column = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<number | null>(null);
   useSelectionSideAttribute(column);
   useLinkOnLineClick(column);
   return (
@@ -208,7 +258,8 @@ export default function DiffColumn({
         key={`${changeNumber}:${selected}:${against}:${layout}:${whitespace}`}
         column={column}
       />
-      {children}
+      {layout === "auto" ? <FitProbe onFit={setFit} /> : null}
+      <SplitFit value={fit}>{children}</SplitFit>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useCallback,
+  useContext,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -49,14 +50,15 @@ import {
 import type { IntralineRange } from "../../lib/diffview";
 import {
   displayPath,
+  fileLayout,
   intralineMarks,
-  oneSided,
   onlySide,
   pairLines,
   rangeSliceOnLine,
   type RowPair,
   skipped,
   statusLetter,
+  widestLine,
 } from "../../lib/diffview";
 import type { ReviewFile } from "../../lib/attachments";
 import {
@@ -84,6 +86,7 @@ import {
 import { scrollBehavior, whenPresent } from "../../lib/scrollspy";
 import { plainClick } from "../../lib/shortcutKey";
 import { selectionAnchorSide } from "../../lib/selection";
+import { SplitFit } from "../../lib/splitFit";
 import {
   EXPAND_STEP,
   fileLinesQuery,
@@ -96,6 +99,7 @@ import {
   type DraftTarget,
 } from "../../lib/reviewContext";
 import { useReview } from "../../lib/reviewContext";
+import type { ReviewSettings } from "../../lib/reviewSettings";
 import CommentEditor from "../CommentEditor";
 import CommentThread from "../CommentThread";
 import NewThreadButton from "../NewThreadButton";
@@ -242,7 +246,7 @@ export default function DiffFileView({
   onRevealed,
 }: {
   file: ReviewFile;
-  layout: "unified" | "split";
+  layout: ReviewSettings["layout"];
   threads: UiThread[];
   domId: string;
   collapsed: boolean;
@@ -378,9 +382,8 @@ export default function DiffFileView({
     shownLine,
   ]);
 
-  // Side-by-side would leave one of a one-sided file's columns blank and
-  // squeeze its text into the half beside it.
-  const rendered = oneSided(file) ? "unified" : layout;
+  const widest = useMemo(() => widestLine(hunks), [hunks]);
+  const rendered = fileLayout(file, layout, widest, useContext(SplitFit));
 
   // Intraline emphasis for modified line pairs, per hunk (keyed by line
   // object identity, so unified and split rows share the same map).

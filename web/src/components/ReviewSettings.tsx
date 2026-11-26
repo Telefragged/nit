@@ -23,7 +23,7 @@ const LAYOUT_OPTIONS: SegOption<ReviewSettings["layout"]>[] = [
   {
     value: "auto",
     label: "Auto",
-    title: "Two columns in a wide window, one column in a narrow window",
+    title: "Two columns for a file whose longest line fits in one of them",
   },
 ];
 

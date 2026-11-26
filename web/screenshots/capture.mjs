@@ -538,6 +538,17 @@ const captures = [
     actions: expandAllFiles,
     colorScheme: "light",
   },
+  // In a window of 1600px, the lines of rotate.rs fit in one code column
+  // of the split layout, and the lines of store.rs do not.
+  {
+    name: "review-full-auto",
+    path: "/changes/11?against=base",
+    actions: async (page) => {
+      await page.setViewportSize({ width: 1600, height: 900 });
+      await expandAllFiles(page);
+      await applySetting(page, "Auto");
+    },
+  },
   // Context expansion: clicks the down arrow of the first gap separator
   // that has one, to show the revealed lines and the lower count.
   {

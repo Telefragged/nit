@@ -1,4 +1,4 @@
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useState } from "react";
 import type { Whitespace } from "../api/types";
 import { readSaved, writeSaved } from "./storage";
 
@@ -8,7 +8,8 @@ const KEY = "nit.review-settings";
  * every change the reviewer opens. */
 export interface ReviewSettings {
   /** `split` draws the old and the new side in two columns. `auto` draws
-   * two columns in a wide window and one column in a narrow window. */
+   * two columns for a file whose longest line fits in one of them, and
+   * one column for any other file. */
   layout: "unified" | "split" | "auto";
   /** Which threads of earlier revisions are ported into the shown range:
    * `open` the unresolved ones, `all` the resolved ones too. */
@@ -49,24 +50,4 @@ export function useReviewSettings(): [
     writeSaved(KEY, next);
   }, []);
   return [settings, save];
-}
-
-const SPLIT_WINDOW = "(min-width: 1600px)";
-
-function subscribeSplitWindow(onChange: () => void) {
-  const query = matchMedia(SPLIT_WINDOW);
-  query.addEventListener("change", onChange);
-  return () => {
-    query.removeEventListener("change", onChange);
-  };
-}
-
-const isSplitWindow = () => matchMedia(SPLIT_WINDOW).matches;
-
-export function useDiffLayout(
-  layout: ReviewSettings["layout"],
-): "unified" | "split" {
-  const splitWindow = useSyncExternalStore(subscribeSplitWindow, isSplitWindow);
-  if (layout !== "auto") return layout;
-  return splitWindow ? "split" : "unified";
 }

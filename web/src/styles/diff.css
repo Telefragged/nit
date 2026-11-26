@@ -23,6 +23,16 @@
     minmax(44px, max-content) minmax(0, 1fr);
 }
 
+/* The probe has the layout of a diff row, so it is invisible, not
+   display: none. */
+.fit-probe {
+  position: absolute;
+  inset-inline: 0;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+
 /* Each row spans all columns and re-exposes them through subgrid, so every
    row's cells share one set of column tracks. */
 .line-row {

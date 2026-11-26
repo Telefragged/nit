@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { DiffFile, Line } from "../api/types";
+import type { DiffFile, Hunk, Line } from "../api/types";
 import { COMMIT_MSG_PATH } from "../api/types";
 import {
+  fileLayout,
   gapLines,
   intralineMarks,
   oneSided,
@@ -10,6 +11,7 @@ import {
   skipped,
   splitExtension,
   treeOrder,
+  widestLine,
 } from "./diffview";
 import type { ReviewFile } from "./attachments";
 
@@ -287,5 +289,50 @@ describe("splitExtension", () => {
     expect(splitExtension(".gitignore")).toEqual([".gitignore", ""]);
     expect(splitExtension("Makefile")).toEqual(["Makefile", ""]);
     expect(splitExtension("a.verylongpart")).toEqual(["a.verylongpart", ""]);
+  });
+});
+
+describe("widestLine", () => {
+  const hunk = (...texts: string[]): Hunk => ({
+    old_start: 1,
+    old_lines: texts.length,
+    new_start: 1,
+    new_lines: texts.length,
+    header: "",
+    lines: texts.map((text, i) => ctx(i + 1, i + 1, text)),
+  });
+
+  it("returns the length of the longest line of every hunk", () => {
+    expect(widestLine([hunk("ab", "abcd"), hunk("abc")])).toBe(4);
+  });
+
+  it("extends a tab to the next multiple of 8", () => {
+    expect(widestLine([hunk("\tx")])).toBe(9);
+    expect(widestLine([hunk("abc\tx")])).toBe(9);
+    expect(widestLine([hunk("abcdefgh\tx")])).toBe(17);
+  });
+});
+
+describe("fileLayout", () => {
+  const both = { old_total: 10, new_total: 10 };
+
+  it("returns a fixed layout as it is", () => {
+    expect(fileLayout(both, "split", 500, 80)).toBe("split");
+    expect(fileLayout(both, "unified", 1, 80)).toBe("unified");
+  });
+
+  it("draws two columns for auto when the widest line fits", () => {
+    expect(fileLayout(both, "auto", 80, 80)).toBe("split");
+    expect(fileLayout(both, "auto", 81, 80)).toBe("unified");
+  });
+
+  it("draws one column for auto before the fit is measured", () => {
+    expect(fileLayout(both, "auto", 1, null)).toBe("unified");
+  });
+
+  it("draws one column for a file with one side", () => {
+    expect(fileLayout({ old_total: 0, new_total: 10 }, "split", 1, 80)).toBe(
+      "unified",
+    );
   });
 });
