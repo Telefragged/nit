@@ -32,7 +32,7 @@ export default function About() {
           setOpen(true);
         }}
       >
-        <Info size={15} aria-hidden />
+        <Info size={16} aria-hidden />
         {update ? <span className="about-dot" /> : null}
       </SidebarMenuButton>
       {open ? (
