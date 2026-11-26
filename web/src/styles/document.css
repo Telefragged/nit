@@ -153,43 +153,6 @@
   background: var(--color-add-intraline);
 }
 
-.doc-deletion {
-  --bar-width: 2px;
-  --hover-area-above-and-below-bar: 3px;
-  --hover-area-beside-bar: 5px;
-
-  position: relative;
-  display: inline-block;
-  width: 0;
-  height: 1em;
-  vertical-align: text-bottom;
-}
-
-.doc-deletion::before {
-  position: absolute;
-  inset: calc(-1 * var(--hover-area-above-and-below-bar))
-    calc(-1 * var(--hover-area-beside-bar));
-  background: linear-gradient(var(--color-del), var(--color-del)) center /
-    var(--bar-width) 100% no-repeat;
-  cursor: help;
-  content: "";
-}
-
-.doc-deletion:hover::after {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: -8px;
-  z-index: var(--z-file-popup);
-  width: max-content;
-  max-width: 420px;
-  padding: 4px 8px;
-  border: 1px solid var(--color-del);
-  background: var(--color-card);
-  color: var(--color-foreground);
-  font-size: 13px;
-  font-weight: 400;
-  line-height: 1.4;
-  white-space: pre-wrap;
-  text-decoration: line-through;
-  content: attr(data-removed);
+.doc-deleted {
+  background: var(--color-del-intraline);
 }

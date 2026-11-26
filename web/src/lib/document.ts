@@ -337,14 +337,10 @@ const withCodeMark = (el: Element, [from, to]: [number, number]): Element => ({
   properties: { ...el.properties, dataMark: `${from}-${to}` },
 });
 
-const span = (
-  className: string[],
-  children: ElementContent[],
-  properties: Element["properties"] = {},
-): Element => ({
+const span = (className: string[], children: ElementContent[]): Element => ({
   type: "element",
   tagName: "span",
-  properties: { ...properties, className },
+  properties: { className },
   children,
 });
 
@@ -415,10 +411,9 @@ export interface Deletion {
 
 /** The element of `block` with the changes of a diff inside its text.
  * The rendered text whose source lies in one of `inserted` is in a
- * `span.doc-inserted`. Each of `deleted` is an empty
- * `span.doc-deletion`, with the text as `data-removed`, before the first
- * rendered character at or after its place. A deletion after every
- * character goes after the last text. */
+ * `span.doc-inserted`. Each of `deleted` is a `span.doc-deleted` with
+ * its text, before the first rendered character at or after its place.
+ * A deletion after every character goes after the last text. */
 export function changedElement(
   block: Block,
   inserted: readonly CommentRange[],
@@ -459,14 +454,13 @@ export function changedElement(
     ].sort((a, b) => a - b);
     const children = edges.flatMap((from, i): ElementContent[] => {
       const here = points.filter((cut) => cut.at === from);
-      const removed = here.map((cut) => cut.text).join(" … ");
       const to = edges[i + 1] ?? from;
       const piece: Text = { type: "text", value: value.slice(from, to) };
       const inside = slices.some(([start, end]) => start <= from && to <= end);
       return [
-        ...(here.length > 0
-          ? [span(["doc-deletion"], [], { dataRemoved: removed })]
-          : []),
+        ...here.map((cut) =>
+          span(["doc-deleted"], [{ type: "text", value: cut.text }]),
+        ),
         ...(to === from
           ? []
           : [inside ? span(["doc-inserted"], [piece]) : piece]),

@@ -7,9 +7,8 @@ function marked(node: ElementContent): string {
   if (node.type === "text") return node.value;
   if (node.type !== "element") return "";
   const classes = [node.properties.className ?? []].flat();
-  if (classes.includes("doc-deletion"))
-    return `[-${String(node.properties.dataRemoved)}-]`;
   const inner = node.children.map(marked).join("");
+  if (classes.includes("doc-deleted")) return `[-${inner}-]`;
   return classes.includes("doc-inserted") ? `{+${inner}+}` : inner;
 }
 
@@ -32,11 +31,11 @@ describe("inlineRow", () => {
     expect(row("One three.", "One two three.")).toEqual(["One {+two +}three."]);
   });
 
-  it("puts a marker in place of a deletion", () => {
-    expect(row("One two three.", "One three.")).toEqual(["One [-two-]three."]);
+  it("marks a deletion at its place in the text", () => {
+    expect(row("One two three.", "One three.")).toEqual(["One [-two -]three."]);
   });
 
-  it("puts the marker of a replaced text before the new text", () => {
+  it("puts a replaced text before the new text", () => {
     expect(row("The old token is here.", "The new token is here.")).toEqual([
       "The [-old-]{+new+} token is here.",
     ]);
