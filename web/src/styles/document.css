@@ -1,7 +1,3 @@
-.document-page {
-  padding-bottom: calc(var(--review-bar-h) + 64px);
-}
-
 .document-block {
   position: relative;
   margin-bottom: 14px;

@@ -118,32 +118,34 @@ export default function DocumentPage() {
     );
   }
   return (
-    <main
-      className="page document-page"
-      aria-busy={summary === undefined || text === undefined}
-    >
-      <div className="subject-line">
-        <h1>{summary?.title}</h1>
-      </div>
-      <DocumentLinkContext.Provider value={link}>
-        {diff ? (
-          <DocumentDiff
-            lines={diff}
-            only={range?.from === range?.to ? "new" : undefined}
-          />
-        ) : text !== undefined ? (
-          <>
-            <DocumentBlocks
-              text={text}
-              references={references}
-              actions={actions}
+    <>
+      <main
+        className="page document-page"
+        aria-busy={summary === undefined || text === undefined}
+      >
+        <div className="subject-line">
+          <h1>{summary?.title}</h1>
+        </div>
+        <DocumentLinkContext.Provider value={link}>
+          {diff ? (
+            <DocumentDiff
+              lines={diff}
+              only={range?.from === range?.to ? "new" : undefined}
             />
-            <DocumentComposer onAppend={append} />
-          </>
-        ) : (
-          <div className="skeleton" style={{ height: 260 }} />
-        )}
-      </DocumentLinkContext.Provider>
+          ) : text !== undefined ? (
+            <>
+              <DocumentBlocks
+                text={text}
+                references={references}
+                actions={actions}
+              />
+              <DocumentComposer onAppend={append} />
+            </>
+          ) : (
+            <div className="skeleton" style={{ height: 260 }} />
+          )}
+        </DocumentLinkContext.Provider>
+      </main>
       {summary && version !== undefined ? (
         <SendBar
           sent={summary.sent === version}
@@ -174,6 +176,6 @@ export default function DocumentPage() {
           live={range === null}
         />
       ) : null}
-    </main>
+    </>
   );
 }

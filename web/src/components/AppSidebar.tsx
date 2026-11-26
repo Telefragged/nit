@@ -32,7 +32,7 @@ export function SidebarLayout({ children }: { children: ReactNode }) {
   return (
     <SidebarProvider>
       <AppSidebar />
-      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+      <div className="min-w-0 flex-1">{children}</div>
     </SidebarProvider>
   );
 }
