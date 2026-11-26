@@ -10,6 +10,7 @@ import { unified } from "unified";
 import type { CommentRange, Line, Side } from "../api/types";
 import type { LineOrRange } from "./comments";
 import type { Lines } from "./diffLink";
+import { remarkDetails } from "./markdownDetails";
 import { sideText } from "./rendered";
 import {
   alignText,
@@ -58,7 +59,11 @@ export interface Part {
   chars?: [number, number];
 }
 
-const processor = unified().use(remarkParse).use(remarkGfm).use(remarkRehype);
+const processor = unified()
+  .use(remarkParse)
+  .use(remarkGfm)
+  .use(remarkDetails)
+  .use(remarkRehype);
 
 const classesOf = (el: Element) =>
   [el.properties.className ?? []].flat().map(String);
@@ -223,8 +228,9 @@ function filterUrls(node: Root | RootContent) {
   if ("children" in node) node.children.forEach(filterUrls);
 }
 
-/** Parses `text` into its blocks, in source order. Raw HTML stays out of
- * the result, because the file comes from the author. */
+/** Parses `text` into its blocks, in source order. The file comes from
+ * the author, so the only HTML in the result is a collapsible group
+ * (`remarkDetails`). */
 export function parseBlocks(text: string): Block[] {
   const tree = processor.runSync(processor.parse(text));
   filterUrls(tree);
@@ -524,7 +530,8 @@ const other = (side: Side): Side => (side === "old" ? "new" : "old");
 /** Renders a file from all of its diff lines. A file with one side
  * renders that side, `only`, with no changes. Otherwise a block changes
  * when the diff adds or removes one of its lines, or changes the block
- * that its lines match on the other side. */
+ * that its lines match on the other side. A changed collapsible group is
+ * open, so that its changes show. */
 export function renderDoc(lines: readonly Line[], only?: Side): RenderedDoc {
   const parse = (side: Side) =>
     only === other(side) ? [] : parseBlocks(sideText(lines, side));
@@ -631,6 +638,7 @@ export function renderDoc(lines: readonly Line[], only?: Side): RenderedDoc {
       run = { removed: [], added: [] };
       doc.rows.push(run);
     }
+    if (block.node.tagName === "details") block.node.properties.open = true;
     (side === "old" ? run.removed : run.added).push(block);
     if (!touches(authoredBlocks, side, block)) doc.drift.add(block);
   }

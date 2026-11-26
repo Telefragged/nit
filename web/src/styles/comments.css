@@ -118,6 +118,7 @@ a.comment-time:hover {
 .comment-body ol,
 .comment-body pre,
 .comment-body blockquote,
+.comment-body details,
 .comment-body table {
   margin: 0 0 6px;
 }

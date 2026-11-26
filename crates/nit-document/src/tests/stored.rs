@@ -115,7 +115,7 @@ fn write_web_fixture() {
         &mut author,
         Writer::Author,
         &format!(
-            "\n## The flow and the plan\n\n[flow.svg]({ATTACHED}web%2Fscreenshots%2Fflow.svg)\n\n[rotation.md]({ATTACHED}plan%2Frotation.md)\n"
+            "\n## The flow and the plan\n\n[flow.svg]({ATTACHED}web%2Fscreenshots%2Fflow.svg)\n\n[rotation.md]({ATTACHED}plan%2Frotation.md)\n\n<details>\n<summary>How the store finds a family</summary>\n\nEach token row has a `family_id`. One statement revokes every row of the family.\n\n</details>\n"
         ),
     );
 

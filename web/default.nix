@@ -73,7 +73,7 @@ let
     src = src.npm;
     inherit nodejs;
     name = "nit-web-npm-deps";
-    hash = "sha256-eloY97d+h8NMWGC1hr7TLK8Qyg28mnsBzmh0e+p8Few=";
+    hash = "sha256-oMTHGgsCHFakYZKUBZBW7tEa7GcwxZFexJNlK8GQq+E=";
   };
 
   # The installed npm dependencies. Every web derivation copies them, so

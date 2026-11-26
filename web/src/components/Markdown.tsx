@@ -2,14 +2,16 @@ import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
+import { remarkDetails } from "../lib/markdownDetails";
 import { components } from "./markdownElements";
 
-const plugins = [remarkGfm, remarkBreaks];
+const plugins = [remarkGfm, remarkBreaks, remarkDetails];
 
 /**
  * A comment body rendered as markdown: GFM plus GitHub-style hard line
- * breaks, so a plain-text body keeps its line structure. Raw HTML stays
- * escaped (no rehype-raw) — bodies come from the author, i.e. untrusted.
+ * breaks, so a plain-text body keeps its line structure. Bodies come from
+ * the author, so the only HTML that renders is a collapsible group
+ * (`remarkDetails`).
  */
 function Markdown({ text }: { text: string }) {
   return (
