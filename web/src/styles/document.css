@@ -150,7 +150,7 @@
 }
 
 .doc-inserted {
-  background: var(--color-add-bg);
+  background: var(--color-add-intraline);
 }
 
 .doc-deletion {
