@@ -78,12 +78,15 @@ pub struct Replacement {
 /// the budget give none.
 ///
 /// The texts differ by words: a replacement starts and ends between two
-/// words, or next to white space or punctuation. An insertion or a
+/// words, or next to white space or punctuation. Two replacements with
+/// only spaces between them are one replacement, so that words that
+/// change together show together. An insertion or a
 /// deletion that fits at several places starts at the first of them that
 /// follows white space, so that it covers a word with the space after it.
 pub fn replacements(old: &str, new: &str) -> Vec<Replacement> {
     let (old, new) = (Words::new(old), Words::new(new));
     let mut edits = hunks(&old.words, &new.words);
+    join_across_spaces(&mut edits, &old.words);
     let mut previous_end = (0, 0);
     for at in 0..edits.len() {
         let next_start = edits
@@ -116,6 +119,18 @@ pub fn replacements(old: &str, new: &str) -> Vec<Replacement> {
             ),
         })
         .collect()
+}
+
+fn join_across_spaces(edits: &mut Vec<Edit>, old: &[&str]) {
+    edits.dedup_by(|next, previous| {
+        let unchanged_between = &old[previous.old.end..next.old.start];
+        let only_spaces = unchanged_between.iter().all(|word| *word == " ");
+        if only_spaces {
+            previous.old.end = next.old.end;
+            previous.new.end = next.new.end;
+        }
+        only_spaces
+    });
 }
 
 fn empty_range_at(at: usize) -> Range<usize> {
@@ -376,6 +391,8 @@ mod tests {
         assert_eq!(spans("one three", "one two three"), [((4, 4), (4, 8))]);
         assert_eq!(spans("one two three", "one three"), [((4, 8), (4, 4))]);
         assert_eq!(spans("- one.", "- one.\n- two."), [((6, 6), (6, 13))]);
+        assert_eq!(spans("looks up the", "finds the"), [((0, 8), (0, 5))]);
+        assert_eq!(spans("a b c", "x y c"), [((0, 3), (0, 3))]);
         assert_eq!(spans("same", "same"), []);
     }
 
