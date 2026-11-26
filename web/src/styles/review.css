@@ -602,7 +602,7 @@ button.rail-toggle,
   line-height: 22px;
 }
 
-.rendered-markdown > .doc-block:first-child > :last-child {
+.rendered-markdown:not(.document-block) > .doc-block:first-child > :last-child {
   margin-top: 0;
 }
 
