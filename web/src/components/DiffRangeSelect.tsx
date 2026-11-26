@@ -1,77 +1,67 @@
-import Select, { type SelectOption } from "./Select";
+import { revisionVersion } from "../lib/version";
+import Select from "./Select";
 
-/** The two ends of a diff over `items`, which are in order: the left
- * picker selects the base of the diff, and the right picker selects the
- * item that the diff ends at.
- *
- * `option` gives the label and the detail of an item. `selected` is
- * the index of the item of the right picker, and `onRight` receives the
- * index of a pick there. The left picker offers `first`, the base
- * before every item, and then each item with `baseValue` of it as its
- * value. An item at or after `selected` is offered but not choosable.
- * `against` is the value of the left picker, and `onLeft` receives the
- * value of a pick there. */
 const FITS_ITEM_AND_DETAIL = "min-w-[18ch]";
 
-export default function DiffRangeSelect<T>({
-  items,
-  option,
-  baseValue,
-  first,
+/** The two ends of the diff of a change: the left picker selects the
+ * base of the diff, and the right picker selects the revision under
+ * review.
+ *
+ * `details` contains the detail of each revision, by its number.
+ * `selected` is the revision of the right picker, and `onRight` receives
+ * the revision of a pick there. The left picker offers the base of the
+ * change, as `"base"`, and then each revision as its version. A revision
+ * at or after `selected` is offered but not choosable. `against` is the
+ * value of the left picker, and `onLeft` receives the value of a pick
+ * there. */
+export default function DiffRangeSelect({
+  details,
   selected,
   against,
-  baseTitle,
-  label,
-  title,
-  placeholder,
   onLeft,
   onRight,
 }: {
-  items: readonly T[];
-  option: (item: T, index: number) => Pick<SelectOption, "label" | "detail">;
-  baseValue: (item: T, index: number) => string;
-  first: SelectOption;
+  details: readonly (string | undefined)[];
   selected: number;
   against: string;
-  baseTitle: string;
-  /** The label, the title and the placeholder of the right picker. */
-  label: string;
-  title: string;
-  placeholder: string;
   onLeft: (value: string) => void;
-  onRight: (index: number) => void;
+  onRight: (revision: number) => void;
 }) {
+  const revisions = details.map((detail, number) => ({
+    label: `r${number}`,
+    detail,
+  }));
   return (
     <>
       <Select
         className={FITS_ITEM_AND_DETAIL}
         label="Diff base"
-        title={baseTitle}
+        title="Base = parent commit; rM = interdiff against revision M"
         placeholder="no base"
         value={against}
         onChange={onLeft}
         options={[
-          first,
-          ...items.map((item, index) => ({
-            ...option(item, index),
-            value: baseValue(item, index),
-            disabled: index >= selected,
+          { value: "base", label: "Base" },
+          ...revisions.map((revision, number) => ({
+            ...revision,
+            value: revisionVersion(number),
+            disabled: number >= selected,
           })),
         ]}
       />
       <span className="dim mono">→</span>
       <Select
-        className="min-w-[18ch]"
-        label={label}
-        title={title}
-        placeholder={placeholder}
+        className={FITS_ITEM_AND_DETAIL}
+        label="Revision"
+        title="Revision under review"
+        placeholder="no revisions"
         value={String(selected)}
         onChange={(value) => {
           onRight(Number(value));
         }}
-        options={items.map((item, index) => ({
-          ...option(item, index),
-          value: String(index),
+        options={revisions.map((revision, number) => ({
+          ...revision,
+          value: String(number),
         }))}
       />
     </>
