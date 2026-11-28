@@ -9,8 +9,8 @@ description = "Writes nit's public contract: the OpenAPI document and the CLI sy
 workspace = true
 
 [dependencies]
-anyhow = "1"
-clap = "4"
-nit = { workspace = true }
-serde_json = "1"
-workspace-hack = { version = "0.1", path = "../workspace-hack" }
+anyhow.workspace = true
+clap.workspace = true
+nit.workspace = true
+serde_json.workspace = true
+workspace-hack.workspace = true
